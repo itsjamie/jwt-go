@@ -1,14 +1,19 @@
 package jwt
 
-import "crypto/subtle"
+import (
+	"crypto/subtle"
+	"time"
+)
 
-// For a type to be a Claims object, it must just have a Valid method that determines
-// if the token is invalid for any supported reason
+// Leeway is the amount of clock skew that is allowed for the verification claims around time
+var Leeway = time.Duration(30) * time.Second
+
+// Claims represents what the interface that a object but implement to be a valid set of claims about a JWT
 type Claims interface {
 	Valid() error
 }
 
-// Structured version of Claims Section, as referenced at
+// StandardClaims is a structured version of the Claims Section, as referenced at
 // https://tools.ietf.org/html/rfc7519#section-4.1
 type StandardClaims struct {
 	Audience  string `json:"aud,omitempty"`
@@ -20,10 +25,9 @@ type StandardClaims struct {
 	Subject   string `json:"sub,omitempty"`
 }
 
-// Validates time based claims "exp, iat, nbf".
-// There is no accounting for clock skew.
-// As well, if any of the above claims are not in the token, it will still
-// be considered a valid claim.
+// Valid checks the time based claims "exp, iat, nbf".
+// It uses the exposed variable Leeway to account for clock-skew, by default 30 seconds of skew is allowed.
+// As well, if any of the above claims are missing from the token, it will still be considered a valid claim.
 func (c StandardClaims) Valid() error {
 	vErr := new(ValidationError)
 	now := TimeFunc().Unix()
@@ -164,14 +168,14 @@ func verifyExp(exp int64, now int64, required bool) bool {
 	if exp == 0 {
 		return !required
 	}
-	return now <= exp
+	return now-int64(Leeway.Seconds()) <= exp
 }
 
 func verifyIat(iat int64, now int64, required bool) bool {
 	if iat == 0 {
 		return !required
 	}
-	return now >= iat
+	return now+int64(Leeway.Seconds()) >= iat
 }
 
 func verifyIss(iss string, cmp string, required bool) bool {
@@ -189,5 +193,5 @@ func verifyNbf(nbf int64, now int64, required bool) bool {
 	if nbf == 0 {
 		return !required
 	}
-	return now >= nbf
+	return now+int64(Leeway.Seconds()) >= nbf
 }
